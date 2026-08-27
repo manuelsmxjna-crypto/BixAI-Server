@@ -47,3 +47,4 @@ La validación es del lado servidor contra el endpoint canónico de Cloudflare. 
 
 El despliegue no forma parte de esta reconstrucción inicial: primero debe probarse en una revisión separada para no reemplazar por accidente el servicio GPU que ya funciona.
 
+`cloudbuild.yaml` genera la etiqueta `turnstile-f27fccf`. `.gcloudignore` incluye los modelos locales en el contexto de construcción, mientras `.gitignore` evita subirlos a GitHub.

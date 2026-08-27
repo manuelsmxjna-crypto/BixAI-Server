@@ -1,0 +1,14 @@
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - --file
+      - Dockerfile.gpu
+      - --tag
+      - us-central1-docker.pkg.dev/$PROJECT_ID/bixai/bixai-server:turnstile-f27fccf
+      - .
+images:
+  - us-central1-docker.pkg.dev/$PROJECT_ID/bixai/bixai-server:turnstile-f27fccf
+options:
+  machineType: E2_HIGHCPU_8
+

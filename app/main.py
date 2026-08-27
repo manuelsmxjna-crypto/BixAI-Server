@@ -1,13 +1,15 @@
 from __future__ import annotations
 
 import io
+import logging
 import os
 import time
+from collections.abc import Iterator
 from typing import Literal
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import Response
+from fastapi.responses import StreamingResponse
 from PIL import Image, UnidentifiedImageError
 
 from .background import BackgroundRemover
@@ -18,6 +20,7 @@ MAX_UPLOAD_MB = int(os.getenv("MAX_UPLOAD_MB", "30"))
 MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024
 MAX_PIXELS = int(os.getenv("MAX_PIXELS", "50000000"))
 ALLOWED_IMAGE_FORMATS = {"PNG", "JPEG", "WEBP"}
+STREAM_CHUNK_BYTES = 1024 * 1024
 ALLOWED_ORIGINS = [
     origin.strip()
     for origin in os.getenv(
@@ -41,6 +44,7 @@ app.add_middleware(
 bg = BackgroundRemover()
 up = Upscaler()
 turnstile = TurnstileVerifier()
+logger = logging.getLogger("bixai")
 
 
 async def _read_upload(file: UploadFile) -> Image.Image:
@@ -59,15 +63,35 @@ async def _read_upload(file: UploadFile) -> Image.Image:
     return image.convert("RGBA")
 
 
-def _png_response(result: Image.Image, model: str, started: float) -> Response:
+def _stream_bytes(buffer: io.BytesIO) -> Iterator[bytes]:
+    try:
+        while chunk := buffer.read(STREAM_CHUNK_BYTES):
+            yield chunk
+    finally:
+        buffer.close()
+
+
+def _png_response(result: Image.Image, model: str, started: float) -> StreamingResponse:
     output = io.BytesIO()
     result.save(output, format="PNG", optimize=False)
-    return Response(
-        content=output.getvalue(),
+    output_bytes = output.tell()
+    output.seek(0)
+    elapsed_ms = round((time.perf_counter() - started) * 1000)
+    logger.info(
+        "PNG generado model=%s width=%s height=%s bytes=%s elapsed_ms=%s",
+        model,
+        result.width,
+        result.height,
+        output_bytes,
+        elapsed_ms,
+    )
+    return StreamingResponse(
+        _stream_bytes(output),
         media_type="image/png",
         headers={
             "X-BixAI-Model": model,
-            "X-BixAI-Elapsed-Ms": str(round((time.perf_counter() - started) * 1000)),
+            "X-BixAI-Elapsed-Ms": str(elapsed_ms),
+            "X-BixAI-Output-Bytes": str(output_bytes),
         },
     )
 

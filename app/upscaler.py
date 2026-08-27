@@ -8,8 +8,8 @@ import onnxruntime as ort
 from PIL import Image
 
 MODEL_PATH = os.getenv("UP_MODEL_PATH", "models/realesr-anime-x4.onnx")
-TILE = int(os.getenv("UP_TILE", "128"))
-PAD = int(os.getenv("UP_PAD", "8"))
+TILE = int(os.getenv("UP_TILE", "256"))
+PAD = int(os.getenv("UP_PAD", "24"))
 SCALE = int(os.getenv("UP_SCALE", "4"))
 
 
@@ -63,6 +63,33 @@ class Upscaler:
             out = self._session.run([self._output_name], {self._input_name: tensor})[0]
         return (np.clip(np.transpose(np.squeeze(out, axis=0), (1, 2, 0)), 0.0, 1.0) * 255.0 + 0.5).astype(np.uint8)
 
+    @staticmethod
+    def _blend_tile(
+        destination: np.ndarray,
+        tile: np.ndarray,
+        dx: int,
+        dy: int,
+        overlap: int,
+        fade_left: bool,
+        fade_top: bool,
+    ) -> None:
+        height, width, _ = tile.shape
+        target = destination[dy:dy + height, dx:dx + width]
+        alpha = np.ones((height, width), dtype=np.float32)
+
+        if fade_left:
+            blend_width = min(overlap, width)
+            ramp = (np.arange(blend_width, dtype=np.float32) + 1.0) / (blend_width + 1.0)
+            alpha[:, :blend_width] *= ramp[None, :]
+        if fade_top:
+            blend_height = min(overlap, height)
+            ramp = (np.arange(blend_height, dtype=np.float32) + 1.0) / (blend_height + 1.0)
+            alpha[:blend_height, :] *= ramp[:, None]
+
+        mixed = target.astype(np.float32) * (1.0 - alpha[..., None])
+        mixed += tile.astype(np.float32) * alpha[..., None]
+        target[:] = np.clip(mixed + 0.5, 0, 255).astype(np.uint8)
+
     def run(self, image: Image.Image, alpha_mode: str = "bilinear") -> Image.Image:
         self._ensure_session()
         rgba = np.asarray(image.convert("RGBA"), dtype=np.uint8)
@@ -72,16 +99,31 @@ class Upscaler:
         rgb_out = np.zeros((h * SCALE, w * SCALE, 3), dtype=np.uint8)
         for y in range(0, h, step):
             for x in range(0, w, step):
-                tile_out = self._infer_tile(self._tile_to_chw(rgba, x - pad, y - pad, TILE))
+                source_x = x - pad
+                source_y = y - pad
+                tile_out = self._infer_tile(self._tile_to_chw(rgba, source_x, source_y, TILE))
                 if tile_out.shape[0] // TILE != SCALE:
                     raise RuntimeError("El modelo devolvió una escala inesperada.")
-                sx0, sy0 = (pad if x > 0 else 0), (pad if y > 0 else 0)
-                sx1 = TILE - pad if x + step < w else min(TILE, pad + (w - x))
-                sy1 = TILE - pad if y + step < h else min(TILE, pad + (h - y))
-                crop = tile_out[sy0*SCALE:sy1*SCALE, sx0*SCALE:sx1*SCALE]
-                dx0, dy0 = x * SCALE, y * SCALE
-                dx1, dy1 = min(w*SCALE, dx0 + crop.shape[1]), min(h*SCALE, dy0 + crop.shape[0])
-                rgb_out[dy0:dy1, dx0:dx1] = crop[:dy1-dy0, :dx1-dx0]
+
+                global_x0 = max(0, source_x)
+                global_y0 = max(0, source_y)
+                global_x1 = min(w, source_x + TILE)
+                global_y1 = min(h, source_y + TILE)
+                tile_x0 = (global_x0 - source_x) * SCALE
+                tile_y0 = (global_y0 - source_y) * SCALE
+                tile_x1 = tile_x0 + (global_x1 - global_x0) * SCALE
+                tile_y1 = tile_y0 + (global_y1 - global_y0) * SCALE
+                crop = tile_out[tile_y0:tile_y1, tile_x0:tile_x1]
+
+                self._blend_tile(
+                    rgb_out,
+                    crop,
+                    global_x0 * SCALE,
+                    global_y0 * SCALE,
+                    pad * 2 * SCALE,
+                    fade_left=x > 0,
+                    fade_top=y > 0,
+                )
         alpha = Image.fromarray(rgba[..., 3], mode="L").resize((w*SCALE, h*SCALE), Image.Resampling.BILINEAR)
         if alpha_mode == "opaque":
             alpha = Image.new("L", (w*SCALE, h*SCALE), 255)
@@ -90,4 +132,3 @@ class Upscaler:
         result = Image.fromarray(rgb_out, mode="RGB").convert("RGBA")
         result.putalpha(alpha)
         return result
-

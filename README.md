@@ -24,6 +24,8 @@ Las acciones válidas son `remove_background` y `upscale`. Cloudflare hace los t
 - `MAX_PIXELS` — por defecto `50000000`.
 - `BG_MODEL_PATH`, `UP_MODEL_PATH`, `BG_MODEL_SIZE`, `UP_TILE`, `UP_PAD`, `UP_SCALE` — ajustes de modelos.
 
+El upscaler usa tiles solapados y mezcla ponderada en sus fronteras. Los valores de despliegue recomendados son `UP_TILE=256` y `UP_PAD=24`; reducir demasiado el contexto puede producir costuras visibles.
+
 ## Modelos
 
 Copia antes del build:

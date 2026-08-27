@@ -18,7 +18,8 @@ Las acciones válidas son `remove_background` y `upscale`. Cloudflare hace los t
 ## Variables de entorno
 
 - `TURNSTILE_SECRET` — obligatoria y secreta. Debe configurarse en Secret Manager/Cloud Run, nunca en Git.
-- `TURNSTILE_ALLOWED_HOSTNAMES` — por defecto `bixprint.mx,localhost,127.0.0.1`.
+- `TURNSTILE_ALLOWED_HOSTNAMES` — hostnames exactos autorizados para emitir tokens de Turnstile.
+- `ALLOWED_ORIGINS` — orígenes HTTPS exactos autorizados por CORS para llamar al backend.
 - `MAX_UPLOAD_MB` — por defecto `30`.
 - `MAX_PIXELS` — por defecto `50000000`.
 - `BG_MODEL_PATH`, `UP_MODEL_PATH`, `BG_MODEL_SIZE`, `UP_TILE`, `UP_PAD`, `UP_SCALE` — ajustes de modelos.

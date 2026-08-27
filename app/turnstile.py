@@ -25,7 +25,8 @@ class TurnstileSettings:
             secret=os.getenv("TURNSTILE_SECRET", "").strip(),
             allowed_hostnames=_csv_env(
                 "TURNSTILE_ALLOWED_HOSTNAMES",
-                "bixprint.mx,localhost,127.0.0.1",
+                "bixprint.mx,bixstudio-builder.pages.dev,"
+                "manuelsmxjna-crypto.github.io,localhost,127.0.0.1",
             ),
             timeout_seconds=float(os.getenv("TURNSTILE_TIMEOUT_SECONDS", "10")),
         )
@@ -67,4 +68,3 @@ class TurnstileVerifier:
             raise HTTPException(status_code=403, detail="La verificación no corresponde a esta operación.")
         if hostname not in self.settings.allowed_hostnames:
             raise HTTPException(status_code=403, detail="Origen no autorizado para BixAI.")
-

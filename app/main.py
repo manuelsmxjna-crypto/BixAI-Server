@@ -18,11 +18,20 @@ MAX_UPLOAD_MB = int(os.getenv("MAX_UPLOAD_MB", "30"))
 MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024
 MAX_PIXELS = int(os.getenv("MAX_PIXELS", "50000000"))
 ALLOWED_IMAGE_FORMATS = {"PNG", "JPEG", "WEBP"}
+ALLOWED_ORIGINS = [
+    origin.strip()
+    for origin in os.getenv(
+        "ALLOWED_ORIGINS",
+        "https://bixprint.mx,https://bixstudio-builder.pages.dev,"
+        "https://manuelsmxjna-crypto.github.io",
+    ).split(",")
+    if origin.strip()
+]
 
 app = FastAPI(title="BixAI Server", version="0.2.0")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://bixprint.mx"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$",
     allow_credentials=False,
     allow_methods=["GET", "POST", "OPTIONS"],
@@ -105,4 +114,3 @@ async def upscale(
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Upscaler falló: {exc}") from exc
     return _png_response(result, "RealESRGAN_anime_x4", started)
-

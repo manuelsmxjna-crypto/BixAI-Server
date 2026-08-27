@@ -22,9 +22,12 @@ Las acciones válidas son `remove_background` y `upscale`. Cloudflare hace los t
 - `ALLOWED_ORIGINS` — orígenes HTTPS exactos autorizados por CORS para llamar al backend.
 - `MAX_UPLOAD_MB` — por defecto `30`.
 - `MAX_PIXELS` — por defecto `50000000`.
+- `MAX_OUTPUT_PIXELS` — máximo de píxeles permitido para la salida normalizada.
 - `BG_MODEL_PATH`, `UP_MODEL_PATH`, `BG_MODEL_SIZE`, `UP_TILE`, `UP_PAD`, `UP_SCALE` — ajustes de modelos.
 
 El upscaler usa tiles solapados y mezcla ponderada en sus fronteras. Los valores de despliegue recomendados son `UP_TILE=256` y `UP_PAD=24`; reducir demasiado el contexto puede producir costuras visibles.
+
+`POST /upscale` acepta opcionalmente `target_width_px` y `target_height_px`. BixAI ejecuta primero RealESRGAN 4× y después reduce con Lanczos dentro de ese límite, conservando la proporción y reconstruyendo el alfa según `alpha_mode`. Esto permite normalizar a un máximo de 300 DPI antes de transferir el PNG al navegador.
 
 ## Modelos
 

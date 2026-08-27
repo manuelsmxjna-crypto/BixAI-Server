@@ -1,4 +1,5 @@
 import numpy as np
+from PIL import Image
 
 from app.upscaler import Upscaler
 
@@ -26,3 +27,22 @@ def test_blend_tile_softens_horizontal_and_vertical_boundaries():
     assert 20 < destination[4, 4, 0] < destination[7, 7, 0] < 220
     assert destination[9, 9, 0] == 220
 
+
+def test_normalize_output_caps_size_and_restores_binary_alpha():
+    rgba = np.zeros((400, 800, 4), dtype=np.uint8)
+    rgba[..., :3] = (120, 30, 220)
+    rgba[:, :400, 3] = 255
+    source = Image.fromarray(rgba)
+
+    result = Upscaler._normalize_output(source, (300, 300), "binary")
+
+    assert result.size == (300, 150)
+    assert set(np.unique(np.asarray(result.getchannel("A")))) <= {0, 255}
+
+
+def test_normalize_output_never_enlarges_result():
+    source = Image.new("RGBA", (120, 80), (1, 2, 3, 255))
+
+    result = Upscaler._normalize_output(source, (600, 600), "binary")
+
+    assert result is source

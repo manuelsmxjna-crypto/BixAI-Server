@@ -90,7 +90,42 @@ class Upscaler:
         mixed += tile.astype(np.float32) * alpha[..., None]
         target[:] = np.clip(mixed + 0.5, 0, 255).astype(np.uint8)
 
-    def run(self, image: Image.Image, alpha_mode: str = "bilinear") -> Image.Image:
+    @staticmethod
+    def _normalize_output(
+        image: Image.Image,
+        max_size: tuple[int, int] | None,
+        alpha_mode: str,
+    ) -> Image.Image:
+        if not max_size:
+            return image
+        max_width, max_height = max_size
+        scale = min(1.0, max_width / image.width, max_height / image.height)
+        if scale >= 1.0:
+            return image
+
+        size = (
+            max(1, round(image.width * scale)),
+            max(1, round(image.height * scale)),
+        )
+        rgb = image.convert("RGB").resize(size, Image.Resampling.LANCZOS)
+        if alpha_mode == "opaque":
+            alpha = Image.new("L", size, 255)
+        else:
+            alpha = image.getchannel("A").resize(size, Image.Resampling.LANCZOS)
+            if alpha_mode == "binary":
+                alpha = Image.fromarray(
+                    np.where(np.asarray(alpha) >= 128, 255, 0).astype(np.uint8)
+                )
+        result = rgb.convert("RGBA")
+        result.putalpha(alpha)
+        return result
+
+    def run(
+        self,
+        image: Image.Image,
+        alpha_mode: str = "bilinear",
+        max_size: tuple[int, int] | None = None,
+    ) -> Image.Image:
         self._ensure_session()
         rgba = np.asarray(image.convert("RGBA"), dtype=np.uint8)
         h, w, _ = rgba.shape
@@ -131,4 +166,4 @@ class Upscaler:
             alpha = Image.fromarray(np.where(np.asarray(alpha) >= 128, 255, 0).astype(np.uint8), mode="L")
         result = Image.fromarray(rgb_out, mode="RGB").convert("RGBA")
         result.putalpha(alpha)
-        return result
+        return self._normalize_output(result, max_size, alpha_mode)

@@ -7,7 +7,7 @@ import time
 from collections.abc import Iterator
 from typing import Literal
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from PIL import Image, UnidentifiedImageError
@@ -19,6 +19,7 @@ from .upscaler import Upscaler
 MAX_UPLOAD_MB = int(os.getenv("MAX_UPLOAD_MB", "30"))
 MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024
 MAX_PIXELS = int(os.getenv("MAX_PIXELS", "50000000"))
+MAX_OUTPUT_PIXELS = int(os.getenv("MAX_OUTPUT_PIXELS", "50000000"))
 ALLOWED_IMAGE_FORMATS = {"PNG", "JPEG", "WEBP"}
 STREAM_CHUNK_BYTES = 1024 * 1024
 ALLOWED_ORIGINS = [
@@ -129,12 +130,26 @@ async def upscale(
     image: UploadFile = File(...),
     turnstile_token: str = Form(..., alias="cf-turnstile-response"),
     alpha_mode: Literal["bilinear", "binary", "opaque"] = "bilinear",
+    target_width_px: int | None = Query(default=None, ge=1, le=30000),
+    target_height_px: int | None = Query(default=None, ge=1, le=30000),
 ):
     await turnstile.verify(turnstile_token, "upscale")
+    if (target_width_px is None) != (target_height_px is None):
+        raise HTTPException(status_code=400, detail="El tamaño objetivo requiere ancho y alto.")
+    if target_width_px and target_height_px and target_width_px * target_height_px > MAX_OUTPUT_PIXELS:
+        raise HTTPException(
+            status_code=413,
+            detail=f"La salida objetivo supera {MAX_OUTPUT_PIXELS:,} píxeles.",
+        )
     source = await _read_upload(image)
     started = time.perf_counter()
     try:
-        result = up.run(source, alpha_mode=alpha_mode)
+        target_size = (
+            (target_width_px, target_height_px)
+            if target_width_px is not None and target_height_px is not None
+            else None
+        )
+        result = up.run(source, alpha_mode=alpha_mode, max_size=target_size)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Upscaler falló: {exc}") from exc
     return _png_response(result, "RealESRGAN_anime_x4", started)
